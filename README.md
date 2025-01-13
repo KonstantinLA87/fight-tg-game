@@ -1,3 +1,1 @@
 # fight-tg-game
-
-SDDSFDS
