@@ -14,11 +14,26 @@ const io = new Server(server, {
 });
 
 // Хранение данных игроков
-const players = {};
+const players = [];
 let waitingPlayer = null;
 
 // Обработка подключений
 io.on("connection", (socket) => {
+    socket.on("findOpponent", ({ name }) => {
+        players.push({ id: socket.id, name });
+
+        if (players.length >= 2) {
+            const player1 = players.shift();
+            const player2 = players.shift();
+
+            // Отправляем обоим игрокам их соперника
+            io.to(player1.id).emit("start", { health: 100, opponentName: player2.name });
+            io.to(player2.id).emit("start", { health: 100, opponentName: player1.name });
+        } else {
+            socket.emit("waiting", { message: "Ожидание соперника..." });
+        }
+    });
+
     console.log(`Player connected: ${socket.id}`);
 
     // Инициализация игрока
