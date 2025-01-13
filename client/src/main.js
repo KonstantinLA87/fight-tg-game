@@ -13,10 +13,12 @@ const randomName = randomNames[Math.floor(Math.random() * randomNames.length)];
 class MenuScene extends Phaser.Scene {
   constructor() {
     super({ key: "MenuScene" });
+    this.searchButton = null; // Ссылка на кнопку
+    this.loader = null; // Ссылка на лоадер
   }
 
   preload() {
-    // Здесь можно загрузить фон или шрифты для меню, если нужно
+    // Загрузка элементов, если нужно
   }
 
   create() {
@@ -34,7 +36,7 @@ class MenuScene extends Phaser.Scene {
     });
 
     // Кнопка "Искать соперника"
-    const searchButton = this.add.dom(400, 300, "button", {
+    this.searchButton = this.add.dom(400, 300, "button", {
       width: "200px",
       height: "50px",
       backgroundColor: "#4CAF50",
@@ -45,15 +47,15 @@ class MenuScene extends Phaser.Scene {
       cursor: "pointer",
     }, "Искать соперника");
 
-    searchButton.addListener("click");
-    searchButton.on("click", () => {
-      searchButton.node.disabled = true; // Блокируем кнопку
-      this.add.text(350, 400, "Поиск соперника...", { font: "20px Arial", fill: "#ffffff" });
+    this.searchButton.addListener("click");
+    this.searchButton.on("click", () => {
+      // Блокируем кнопку и показываем лоадер
+      this.showLoader();
 
       // Сообщаем серверу о начале поиска
       socket.emit("findOpponent", { name: randomName });
 
-      // Ждём ответа от сервера
+      // Ждем ответа от сервера
       socket.on("start", (data) => {
         this.scene.start("GameScene", { health: data.health, name: randomName, opponentName: data.opponentName });
       });
@@ -62,6 +64,33 @@ class MenuScene extends Phaser.Scene {
         this.add.text(350, 450, data.message, { font: "16px Arial", fill: "#ffffff" });
       });
     });
+  }
+
+  // Метод для показа лоадера
+  showLoader() {
+    // Удаляем кнопку
+    this.searchButton.destroy();
+
+    // Создаем DOM-элемент для лоадера
+    this.loader = this.add.dom(400, 300, 'div', {
+      width: '50px',
+      height: '50px',
+      border: '5px solid #f3f3f3',
+      borderTop: '5px solid #4CAF50',
+      borderRadius: '50%',
+      animation: 'spin 1s linear infinite',
+    });
+
+    // Добавляем стили для анимации
+    const style = document.createElement('style');
+    style.type = 'text/css';
+    style.innerHTML = `
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `;
+    document.getElementsByTagName('head')[0].appendChild(style);
   }
 }
 
@@ -73,6 +102,10 @@ class GameScene extends Phaser.Scene {
     this.enemyHealth = 100;
     this.playerName = null;
     this.opponentName = null;
+    this.inputField = null;
+    this.attackButton = null;
+    this.healthBar = null;
+    this.enemyHealthBar = null;
   }
 
   preload() {}
@@ -99,9 +132,107 @@ class GameScene extends Phaser.Scene {
     this.enemyHealthBar.fillRect(500, 50, 200, 10);
     this.add.text(500, 70, "Enemy Health", { font: "16px Arial", fill: "#ffffff" });
 
-    // Остальная логика игры...
+    // Поле ввода для атаки
+    this.inputField = this.add.dom(400, 300, "input", {
+      type: "number",
+      min: "0",
+      max: "100",
+      placeholder: "Enter attack value (0-100)",
+      width: "200px",
+      height: "30px",
+      border: "1px solid #ccc",
+      borderRadius: "5px",
+    });
+
+    // Кнопка "Ударить"
+    this.attackButton = this.add.dom(
+      400,
+      350,
+      "button",
+      {
+        width: "150px",
+        height: "40px",
+        backgroundColor: "#4CAF50",
+        color: "white",
+        border: "none",
+        borderRadius: "5px",
+        cursor: "pointer",
+      },
+      "Attack"
+    );
+
+    this.attackButton.addListener("click");
+    this.attackButton.on("click", () => {
+      const attackValue = parseInt(this.inputField.node.value, 10);
+      if (!isNaN(attackValue) && attackValue >= 0 && attackValue <= 100) {
+        socket.emit("attack", attackValue);
+        this.inputField.node.value = ""; // Очистить поле ввода
+      } else {
+        alert("Enter a valid attack value (0-100)");
+      }
+    });
+
+    // Обработка начала игры
+    socket.on('start', (data) => {
+      this.statusText.setText('Opponent found!');
+      this.health = data.health;
+
+      // Указываем координаты для игрока
+      this.updateHealthBar(this.healthBar, this.health);
+    });
+
+    // Обработка ожидания
+    socket.on("waiting", (data) => {
+      this.statusText.setText(data.message);
+    });
+
+    // Обновление здоровья игрока
+    socket.on("update", (data) => {
+      this.health = data.health;
+      this.updateHealthBar(this.healthBar, this.health, 100, 50); // Координаты для полоски игрока
+
+      if (this.health <= 0) {
+        alert("You lost!");
+        socket.disconnect();
+      }
+    });
+
+    // Обновление здоровья противника
+    socket.on("updateEnemyHealth", (data) => {
+      this.enemyHealth = data.health;
+      this.updateHealthBar(this.enemyHealthBar, this.enemyHealth, 500, 50); // Координаты для полоски противника
+
+      if (this.enemyHealth <= 0) {
+        alert("You won!");
+        socket.disconnect();
+      }
+    });
+
+    // Обработка конца игры
+    socket.on("gameOver", (data) => {
+      alert(data.message);
+      socket.disconnect();
+      this.attackButton.node.disabled = true;
+      this.statusText.setText("Game Over");
+    });
+  }
+
+  // Метод для обновления полоски здоровья
+  updateHealthBar(bar, health, x, y) {
+    bar.clear(); // Очищаем предыдущий прямоугольник
+    if (bar === this.healthBar) {
+      bar.fillStyle(0x00ff00, 1); // Зеленая полоска для игрока
+    } else {
+      bar.fillStyle(0xff0000, 1); // Красная полоска для противника
+    }
+
+    console.log(bar, x, y);
+
+    // Перерисовываем прямоугольник с новыми координатами
+    bar.fillRect(x, y, (health / 100) * 200, 10); // Пропорционально здоровью
   }
 }
+
 
 // Конфигурация Phaser
 const config = {
