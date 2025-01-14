@@ -23,7 +23,7 @@ class MenuScene extends Phaser.Scene {
 
   create() {
     // Название игры
-    this.add.text(250, 150, "БИТКА ТИТАНОВ", { 
+    this.add.text(250, 150, "БИТВА ТИТАНОВ", { 
       font: "48px Arial", 
       fill: "#ffffff", 
       fontStyle: "bold" 
