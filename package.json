@@ -3,9 +3,14 @@
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",
+  "scripts": {
+    "start": "node server/index.js",
+    "bot": "node bot.js"
+  },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.21.2",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "telegraf": "^4.16.3"
   }
 }
